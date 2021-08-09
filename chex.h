@@ -1,8 +1,7 @@
-#ifndef HEX_H
-#define HEX_H
+#ifndef _CHEX_H
+#define _CHEX_H
 
 //headers
-#include "assert.h"
 #include "math.h"
 
 //structures
@@ -35,14 +34,15 @@ typedef struct Orientation
 
 typedef struct Layout 
 {
-    Orientation orientation;
-    Point size;
+    int type;
+    int parity;
     Point origin;
+    Point size;
 } Layout;
 
 //defines
-#define EVEN +1
-#define ODD -1
+#define PARITY_EVEN +1
+#define PARITY_ODD -1
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
@@ -50,11 +50,15 @@ typedef struct Layout
 
 #define HEX_DIM 6
 
-#define HEX_DIRECTIONS (Hex[6]){ {1, 0, -1}, {1, -1, 0}, {0, -1, 1}, {-1, 0, 1}, {-1, 1, 0}, {0, 1, -1} }
+#define HEX_DIRECTIONS (Hex[HEX_DIM]){ {1, 0, -1}, {1, -1, 0}, {0, -1, 1}, {-1, 0, 1}, {-1, 1, 0}, {0, 1, -1} }
 
-#define POINTY_ORIENTATION (Orientation){ sqrtf(3.0f), sqrtf(3.0f)/2.0f, 0.0f, 3.0f/2.0f, sqrtf(3.0f)/3.0f, -1.0f/3.0f, 0.0f, 2.0f/3.0f, 0.5f }
+#define ORIENTATION_POINTY (Orientation){ sqrtf(3.0f), sqrtf(3.0f)/2.0f, 0.0f, 3.0f/2.0f, sqrtf(3.0f)/3.0f, -1.0f/3.0f, 0.0f, 2.0f/3.0f, 0.5f }
 
-#define FLAT_ORIENTATION (Orientation){ 3.0f/2.0f, 0.0f, sqrtf(3.0f)/2.0f, sqrtf(3.0f), 2.0f/3.0f, 0.0f, -1.0f/3.0f, sqrtf(3.0f)/3.0f, 0.0f }
+#define ORIENTATION_FLAT (Orientation){ 3.0f/2.0f, 0.0f, sqrtf(3.0f)/2.0f, sqrtf(3.0f), 2.0f/3.0f, 0.0f, -1.0f/3.0f, sqrtf(3.0f)/3.0f, 0.0f }
+
+#define LAYOUT_POINTY 0
+
+#define LAYOUT_FLAT 1
 
 //functions declaration
 
@@ -78,34 +82,39 @@ Hex HexDirection(int direction);
 
 Hex HexNeighbor(Hex hex, int direction) ;
 
-Point HexToPixel(Layout layout, Hex h);
+Point HexToPoint(Layout layout, Hex h);
 
 Point HexCornerOffset(Layout layout, int corner);
 
 Point *HexCorners(Layout layout, Hex h);
 
-Hex PixelToHex(Layout layout, Point p);
+Hex PointToHex(Layout layout, Point p);
 
 HexFrac HexFracInit(float q, float r, float s);
 
 Hex HexFracRound(HexFrac h);
 
-HexFrac PixelToHexFrac(Layout layout, Point p);
+HexFrac PointToHexFrac(Layout layout, Point p);
 
 HexOff HexOffInit(int row, int col);
 
-HexOff HexToHexOffq(int offset, Hex h);
+HexOff HexToHexOffq(int parity, Hex h);
 
-HexOff HexToHexOffr(int offset, Hex h);
+HexOff HexToHexOffr(int parity, Hex h);
 
-Hex HexOffqToHex(int offset, HexOff h);
+HexOff HexToHexOff(Layout layout, Hex h);
 
-Hex HexOffqToHex(int offset, HexOff h); 
+Hex HexOffqToHex(int parity, HexOff h);
 
-Layout LayoutInit(Orientation orientation, Point size, Point origin);
+Hex HexOffqToHex(int parity, HexOff h); 
 
+Hex HexOffToHex(Layout layout, HexOff h);
 
-#ifdef HEX //functions implementation
+Layout LayoutInit(int type, int parity, Point origin, Point size);
+
+Orientation LayoutToOrientation(Layout layout);
+
+#ifdef CHEX //functions implementation
 
 /**********/
 Point PointInit(float x, float y)
@@ -172,9 +181,9 @@ Hex HexNeighbor(Hex hex, int direction)
 }
 
 /**********/
-Point HexToPixel(Layout layout, Hex h) 
+Point HexToPoint(Layout layout, Hex h) 
 {
-    Orientation M = layout.orientation;
+    Orientation M = LayoutToOrientation(layout);
 
     float x = (M.f0 * h.q + M.f1 * h.r) * layout.size.x;
 
@@ -188,7 +197,9 @@ Point HexCornerOffset(Layout layout, int corner)
 {
     Point size = layout.size;
 
-    float angle = 2.0f * (float)M_PI * (layout.orientation.angle + corner) / (float)HEX_DIM;
+    Orientation m = LayoutToOrientation(layout);
+
+    float angle = 2.0f * (float)M_PI * (m.angle + corner) / (float)HEX_DIM;
 
     return PointInit(size.x * cosf(angle), size.y * sinf(angle));
 }
@@ -198,7 +209,7 @@ Point *HexCorners(Layout layout, Hex h)
 {
     static Point corners[HEX_DIM] = {0};
 
-    Point center = HexToPixel(layout, h);
+    Point center = HexToPoint(layout, h);
 
     for (int i = 0; i < HEX_DIM; i++) 
     {
@@ -211,9 +222,9 @@ Point *HexCorners(Layout layout, Hex h)
 }
 
 /**********/
-Hex PixelToHex(Layout layout, Point p)
+Hex PointToHex(Layout layout, Point p)
 {
-    return HexFracRound( PixelToHexFrac(layout, p) );
+    return HexFracRound( PointToHexFrac(layout, p) );
 }
 
 /**********/
@@ -244,9 +255,9 @@ Hex HexFracRound(HexFrac h)
 }
 
 /**********/
-HexFrac PixelToHexFrac(Layout layout, Point p)
+HexFrac PointToHexFrac(Layout layout, Point p)
 {
-    Orientation M = layout.orientation;
+    Orientation M = LayoutToOrientation(layout);
 
     Point pt = PointInit((p.x - layout.origin.x) / layout.size.x,
                      (p.y - layout.origin.y) / layout.size.y);
@@ -265,23 +276,19 @@ HexOff HexOffInit(int row, int col)
 }
 
 /**********/
-HexOff HexToHexOffq(int offset, Hex h) 
+HexOff HexToHexOffq(int parity, Hex h) 
 {
-    assert(offset == EVEN || offset == ODD);
-
     int col = h.q;
 
-    int row = h.r + (int) ( (h.q + offset * (h.q & 1)) / 2 );
+    int row = h.r + (int) ( (h.q + parity * (h.q & 1)) / 2 );
 
     return HexOffInit(row, col);
 }
 
 /**********/
-HexOff HexToHexOffr(int offset, Hex h) 
+HexOff HexToHexOffr(int parity, Hex h) 
 {
-    assert(offset == EVEN || offset == ODD);
-    
-    int col = h.q + (int) ( (h.r + offset * (h.r & 1)) / 2 );
+    int col = h.q + (int) ( (h.r + parity * (h.r & 1)) / 2 );
 
     int row = h.r;
     
@@ -289,13 +296,22 @@ HexOff HexToHexOffr(int offset, Hex h)
 }
 
 /**********/
-Hex HexOffqToHex(int offset, HexOff h) 
+HexOff HexToHexOff(Layout layout, Hex h)
 {
-    assert(offset == EVEN || offset == ODD);
+    HexOff off = {0};
 
+    if (layout.type==LAYOUT_POINTY) { off = HexToHexOffr(layout.parity,h); }
+    if (layout.type==LAYOUT_FLAT) { off = HexToHexOffq(layout.parity,h); }
+
+    return off;
+}
+
+/**********/
+Hex HexOffqToHex(int parity, HexOff h) 
+{
     int q = h.col;
 
-    int r = h.row - (int)( (h.col + offset * (h.col & 1)) / 2 );
+    int r = h.row - (int)( (h.col + parity * (h.col & 1)) / 2 );
 
     int s = -q - r;
 
@@ -303,11 +319,9 @@ Hex HexOffqToHex(int offset, HexOff h)
 }
 
 /**********/
-Hex HexOffrToHex(int offset, HexOff h) 
+Hex HexOffrToHex(int parity, HexOff h) 
 {
-    assert(offset == EVEN || offset == ODD);
-
-    int q = h.col - (int)( (h.row + offset * (h.row & 1)) / 2 );
+    int q = h.col - (int)( (h.row + parity * (h.row & 1)) / 2 );
 
     int r = h.row;
 
@@ -316,11 +330,34 @@ Hex HexOffrToHex(int offset, HexOff h)
     return HexInit(q, r, s);
 }
 
+/**********/
+Hex HexOffToHex(Layout layout, HexOff h)
+{
+    Hex hex = {0};
+
+    if (layout.type==LAYOUT_POINTY) { hex = HexOffrToHex(layout.parity,h); }
+        
+    if (layout.type==LAYOUT_FLAT) { hex = HexOffqToHex(layout.parity,h); }
+
+    return hex;
+}
 
 /**********/
-Layout LayoutInit(Orientation orientation, Point size, Point origin)
+Layout LayoutInit(int type, int parity, Point origin, Point size)
 {
-    return (Layout){orientation, size, origin};
+    return (Layout){type,parity,origin,size};
+}
+
+/**********/
+Orientation LayoutToOrientation(Layout layout)
+{
+    Orientation o = {0};
+
+    if(layout.type==LAYOUT_POINTY){ return ORIENTATION_POINTY; }
+
+    if(layout.type==LAYOUT_FLAT){ return ORIENTATION_FLAT; }
+
+    return o;
 }
 
 #endif 
